@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Adivina el Número">
+    <title>🎯 Adivina el Número - Móvil</title>
+    <link rel="stylesheet" href="mobile-style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
+</head>
+<body>
+    <div class="mobile-game-container">
+        <!-- Header móvil optimizado -->
+        <header class="mobile-header">
+            <div class="header-content">
+                <h1 class="mobile-title">
+                    <span class="icon-target"></span>
+                    Adivina el Número
+                </h1>
+                <div class="mobile-game-info">
+                    <div class="round-info">
+                        <span class="icon-dice"></span>
+                        <span id="round-display">1/5</span>
+                    </div>
+                    <div class="best-score">
+                        <span class="icon-trophy"></span>
+                        <span id="best-score-display">-</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Contenido principal optimizado para móvil -->
+        <main class="mobile-content">
+            <!-- Instrucciones simplificadas -->
+            <section class="mobile-instructions">
+                <p class="main-instruction">🎯 Adivina el número secreto</p>
+                <p class="sub-instruction">Entre 1 y 100 • 5 rondas</p>
+                <div class="challenge-info">
+                    <p><strong>💡 Desbloquea pistas:</strong></p>
+                    <p>• Consigue +90 puntos en una ronda</p>
+                    <p>• O resuelve una ecuación matemática</p>
+                </div>
+            </section>
+
+            <!-- Input optimizado para móvil -->
+            <section class="mobile-input-section">
+                <div class="input-container">
+                    <input 
+                        type="number" 
+                        id="number-input" 
+                        placeholder="Tu número..."
+                        min="1" 
+                        max="100"
+                        autocomplete="off"
+                        inputmode="numeric"
+                    >
+                    <button id="guess-btn" class="mobile-guess-btn">
+                        <span class="icon-dice"></span>
+                        <span>Intentar</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Sección de pista móvil -->
+            <section class="mobile-hint-section">
+                <button id="hint-btn" class="mobile-hint-btn">
+                    <span class="icon-lightbulb"></span>
+                    <span>Desbloquear pista</span>
+                </button>
+                <div id="hint-display" class="mobile-hint-display"></div>
+            </section>
+
+            <!-- Resultado móvil -->
+            <section class="mobile-result-section">
+                <div id="result-display" class="mobile-result-display"></div>
+            </section>
+
+            <!-- Puntuación móvil -->
+            <section class="mobile-score-section">
+                <div class="mobile-score-container">
+                    <span class="score-label">Puntuación Total:</span>
+                    <span id="total-score-display" class="mobile-score-value">0</span>
+                </div>
+            </section>
+
+            <!-- Controles móviles -->
+            <section class="mobile-controls">
+                <button id="new-game-btn" class="mobile-control-btn primary">
+                    <span class="icon-refresh"></span>
+                    <span>Nueva Partida</span>
+                </button>
+                <button id="exit-btn" class="mobile-control-btn secondary">
+                    <span class="icon-exit"></span>
+                    <span>Salir</span>
+                </button>
+            </section>
+        </main>
+
+        <!-- Footer móvil -->
+        <footer class="mobile-footer">
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div id="progress-fill" class="progress-fill"></div>
+                </div>
+                <div class="progress-text">
+                    <span id="progress-text">Ronda 1 de 5</span>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Modal móvil -->
+    <div id="modal" class="mobile-modal">
+        <div class="mobile-modal-content">
+            <div class="mobile-modal-header">
+                <h2 id="modal-title"></h2>
+                <button id="modal-close" class="mobile-modal-close">
+                    <span>✕</span>
+                </button>
+            </div>
+            <div class="mobile-modal-body">
+                <div id="modal-message"></div>
+            </div>
+            <div class="mobile-modal-footer">
+                <button class="mobile-modal-btn">Continuar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Teclado numérico virtual -->
+    <div class="virtual-keyboard" id="virtual-keyboard">
+        <div class="keyboard-row">
+            <button class="key-btn" data-key="1">1</button>
+            <button class="key-btn" data-key="2">2</button>
+            <button class="key-btn" data-key="3">3</button>
+        </div>
+        <div class="keyboard-row">
+            <button class="key-btn" data-key="4">4</button>
+            <button class="key-btn" data-key="5">5</button>
+            <button class="key-btn" data-key="6">6</button>
+        </div>
+        <div class="keyboard-row">
+            <button class="key-btn" data-key="7">7</button>
+            <button class="key-btn" data-key="8">8</button>
+            <button class="key-btn" data-key="9">9</button>
+        </div>
+        <div class="keyboard-row">
+            <button class="key-btn" data-key="0">0</button>
+            <button class="key-btn" data-key="backspace">⌫</button>
+            <button class="key-btn" data-key="enter">✓</button>
+        </div>
+    </div>
+
+    <script src="mobile-script.js"></script>
+</body>
+</html>
