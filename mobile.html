@@ -13,7 +13,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="icon-192.png">
 </head>
 <body>
     <div class="mobile-game-container">
@@ -24,6 +23,11 @@
                     <span class="icon-target"></span>
                     Adivina el Número
                 </h1>
+                <button id="help-btn" class="help-btn" aria-label="Estrategias">?</button>
+                <div class="mode-toggle" role="tablist" aria-label="Selector de modo">
+                    <button id="mode-sp" class="mode-btn active" role="tab" aria-selected="true">1 Jugador</button>
+                    <button id="mode-mp" class="mode-btn" role="tab" aria-selected="false">Multijugador</button>
+                </div>
                 <div class="mobile-game-info">
                     <div class="round-info">
                         <span class="icon-dice"></span>
@@ -50,7 +54,7 @@
                 </div>
             </section>
 
-            <!-- Input optimizado para móvil -->
+            <!-- Input optimizado para móvil (1 jugador) -->
             <section class="mobile-input-section">
                 <div class="input-container">
                     <input 
@@ -60,13 +64,44 @@
                         min="1" 
                         max="100"
                         autocomplete="off"
-                        inputmode="numeric"
+                        inputmode="none"
+                        readonly
                     >
                     <button id="guess-btn" class="mobile-guess-btn">
                         <span class="icon-dice"></span>
                         <span>Intentar</span>
                     </button>
                 </div>
+            </section>
+
+            <!-- Sección multijugador -->
+            <section class="mp-section" id="mp-section" hidden>
+                <div class="mp-header">
+                    <div class="timer" id="mp-timer">15s</div>
+                </div>
+                <div class="lobby-controls">
+                    <button id="btn-create-room" class="lobby-btn primary">Crear sala</button>
+                    <button id="btn-join-room" class="lobby-btn">Unirse</button>
+                </div>
+                <div class="lobby-status" id="lobby-status" hidden>
+                    <div>Código de sala: <strong id="room-code">-</strong> <button id="copy-code" class="mini-btn">Copiar</button></div>
+                    <div>Estado: <span id="room-state">Esperando...</span></div>
+                </div>
+                <div class="mp-players">
+                    <div class="mp-player" id="p1">
+                        <div class="mp-title">Jugador 1</div>
+                        <input type="number" id="p1-number-input" placeholder="Tu número..." min="1" max="100" inputmode="none" readonly>
+                        <button id="p1-guess-btn" class="mobile-guess-btn">Intentar</button>
+                        <div class="mp-score">Puntuación: <span id="p1-score">0</span></div>
+                    </div>
+                    <div class="mp-player" id="p2">
+                        <div class="mp-title">Jugador 2</div>
+                        <input type="number" id="p2-number-input" placeholder="Tu número..." min="1" max="100" inputmode="none" readonly>
+                        <button id="p2-guess-btn" class="mobile-guess-btn">Intentar</button>
+                        <div class="mp-score">Puntuación: <span id="p2-score">0</span></div>
+                    </div>
+                </div>
+                <div class="mp-note">Misma meta para ambos. Ronda de 15s. El más lejos recibe penalización igual a la distancia del más cercano. Empate: sin penalización.</div>
             </section>
 
             <!-- Sección de pista móvil -->
@@ -106,13 +141,16 @@
 
         <!-- Footer móvil -->
         <footer class="mobile-footer">
-            <div class="progress-container">
-                <div class="progress-bar">
-                    <div id="progress-fill" class="progress-fill"></div>
+            <div class="footer-flex">
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div id="progress-fill" class="progress-fill"></div>
+                    </div>
+                    <div class="progress-text">
+                        <span id="progress-text">Ronda 1 de 5</span>
+                    </div>
                 </div>
-                <div class="progress-text">
-                    <span id="progress-text">Ronda 1 de 5</span>
-                </div>
+                <div class="signature-k1" aria-label="Firma">K1</div>
             </div>
         </footer>
     </div>
@@ -160,5 +198,319 @@
     </div>
 
     <script src="mobile-script.js"></script>
+    <!-- Firebase (usar compat para simplificar) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+    <script>
+    // Pega tu configuración de Firebase aquí
+    // window.FIREBASE_CONFIG = { apiKey:"", authDomain:"", databaseURL:"", projectId:"", storageBucket:"", messagingSenderId:"", appId:"" };
+    </script>
+    <script>
+    // Mejora ligera: forzar uso de teclado virtual propio y mostrar ayuda
+    (function() {
+        const input = document.getElementById('number-input');
+        const vk = document.getElementById('virtual-keyboard');
+        const guessBtn = document.getElementById('guess-btn');
+        const helpBtn = document.getElementById('help-btn');
+        const modal = document.getElementById('modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalClose = document.getElementById('modal-close');
+        const roundDisplay = document.getElementById('round-display');
+
+        // Registro de jugadas del usuario
+        const userGuesses = [];
+
+        // Evitar abrir teclado nativo
+        input.addEventListener('touchstart', function(e) { e.preventDefault(); });
+        input.addEventListener('mousedown', function(e) { e.preventDefault(); });
+        input.addEventListener('click', function() {
+            vk.classList.add('show');
+            vk.style.display = 'block';
+        });
+
+        // Teclado virtual
+        vk.addEventListener('click', function(e) {
+            const btn = e.target.closest('.key-btn');
+            if (!btn) return;
+            const key = btn.getAttribute('data-key');
+            const val = input.value || '';
+            if (key === 'backspace') {
+                input.value = val.slice(0, -1);
+            } else if (key === 'enter') {
+                guessBtn?.click();
+            } else if (/^\d$/.test(key)) {
+                if (val.length < 3) input.value = val + key;
+            }
+        });
+
+        // Capturar intento antes de que el juego limpie el input
+        guessBtn?.addEventListener('click', function() {
+            const v = parseInt(input.value, 10);
+            if (!isNaN(v)) {
+                userGuesses.push(v);
+            }
+            // Pequeño retardo y comprobar si terminó la partida (5/5) o si se abre el modal
+            setTimeout(checkEndAndClassify, 200);
+        });
+
+        function checkEndAndClassify() {
+            const roundsText = (roundDisplay?.textContent || '').trim();
+            const isEndRounds = /5\s*\/\s*5/.test(roundsText);
+            const modalVisible = modal && getComputedStyle(modal).display !== 'none';
+            if (isEndRounds || modalVisible) {
+                const label = classifyPlaystyle(userGuesses);
+                if (label) {
+                    appendPlaystyleToModal(label);
+                }
+            }
+        }
+
+        function appendPlaystyleToModal(label) {
+            // Si el modal aún no está visible, lo añadimos cuando se muestre
+            if (modal && getComputedStyle(modal).display === 'none') {
+                const obs = new MutationObserver(() => {
+                    if (getComputedStyle(modal).display !== 'none') {
+                        modalMessage.innerHTML += `<div style="margin-top:12px; padding:12px; border-top:1px solid var(--border-color); text-align:center"><strong>Estilo de juego:</strong> ${label}</div>`;
+                        obs.disconnect();
+                    }
+                });
+                obs.observe(modal, { attributes: true, attributeFilter: ['style', 'class'] });
+                return;
+            }
+            modalMessage.innerHTML += `<div style="margin-top:12px; padding:12px; border-top:1px solid var(--border-color); text-align:center"><strong>Estilo de juego:</strong> ${label}</div>`;
+        }
+
+        // Clasificador de estilos
+        function classifyPlaystyle(guesses) {
+            if (!guesses || guesses.length === 0) return '';
+            const n = guesses.length;
+            const mean = guesses.reduce((a,b)=>a+b,0) / n;
+            const around50Count = guesses.filter(g => Math.abs(g - 50) <= 5).length;
+            const allFifty = guesses.every(g => g === 50);
+            if (allFifty) return 'Siempre 50';
+
+            // Alternador: cambios de signo respecto a 50 en la mayoría de transiciones
+            let flips = 0, steps = 0;
+            for (let i = 1; i < n; i++) {
+                const prev = guesses[i-1] - 50;
+                const curr = guesses[i] - 50;
+                if (prev === 0 || curr === 0) continue;
+                steps++;
+                if (prev * curr < 0) flips++;
+            }
+            const flipRatio = steps ? flips / steps : 0;
+
+            // Inteligente (complementario a 100): g[i] + g[i-1] ≈ 100 la mayoría de veces (±3)
+            let compPairs = 0, compSteps = 0;
+            for (let i = 1; i < n; i++) {
+                compSteps++;
+                if (Math.abs((guesses[i] + guesses[i-1]) - 100) <= 3) compPairs++;
+            }
+            const compRatio = compSteps ? compPairs / compSteps : 0;
+
+            // Criterios
+            if (around50Count / n >= 0.75) return 'Alrededor de 50';
+            if (flipRatio >= 0.7) return 'Alternador';
+            if (compRatio >= 0.7) return 'Inteligente';
+
+            // Verdadero random: alta variación y sin patrones anteriores
+            const variance = guesses.reduce((acc, g) => acc + Math.pow(g - mean, 2), 0) / n;
+            if (variance >= 400) return 'Verdadero random'; // desviación típica ≥ 20
+
+            // Media adaptativa (fallback heurístico): tendencia a acercarse al 50
+            const distStart = Math.abs(guesses[0] - 50);
+            const distEnd = Math.abs(guesses[n-1] - 50);
+            if (distEnd < distStart && mean > 40 && mean < 60) return 'Media adaptativa';
+
+            return 'Mixto';
+        }
+
+        // Botón de ayuda
+        helpBtn?.addEventListener('click', function() {
+            modalTitle.textContent = 'Estrategias de Juego';
+            modalMessage.innerHTML = `
+                <div style="text-align:left; line-height:1.5">
+                    <p><strong>¿Cómo jugar mejor?</strong></p>
+                    <ul style="padding-left:18px;">
+                        <li><strong>Siempre 50</strong>: siempre intentas poner el número 50.</li>
+                        <li><strong>Alrededor de 50</strong>: intentas números cercanos a 50 (45-55).</li>
+                        <li><strong>Alternador</strong>: alternas 60, 40, 70, 30, ...</li>
+                        <li><strong>Inteligente</strong>: usas la distancia entre 100 y el número anterior.</li>
+                        <li><strong>Verdadero random</strong>: eliges un número realmente aleatorio.</li>
+                        <li><strong>Media adaptativa</strong>: si te pasas, baja a la mitad; si te quedas corto, sube a la mitad del rango restante.</li>
+                        <li><strong>Subida gradual</strong>: empieza en 10 y sube de 10 en 10 hasta acercarte, luego ajusta fino.</li>
+                    </ul>
+                </div>
+            `;
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        });
+
+        // Cerrar modal
+        modalClose?.addEventListener('click', function() {
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        });
+        modal?.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            }
+        });
+    })();
+    </script>
+    <script>
+    // Modo multijugador: UI, temporizador, puntuación, pista por ecuación (carrera)
+    (function(){
+        const modeSpBtn = document.getElementById('mode-sp');
+        const modeMpBtn = document.getElementById('mode-mp');
+        const spSection = document.querySelector('.mobile-input-section');
+        const mpSection = document.getElementById('mp-section');
+        const p1Input = document.getElementById('p1-number-input');
+        const p2Input = document.getElementById('p2-number-input');
+        const p1GuessBtn = document.getElementById('p1-guess-btn');
+        const p2GuessBtn = document.getElementById('p2-guess-btn');
+        const p1ScoreEl = document.getElementById('p1-score');
+        const p2ScoreEl = document.getElementById('p2-score');
+        const roundDisplay = document.getElementById('round-display');
+        const hintBtn = document.getElementById('hint-btn');
+        const hintDisplay = document.getElementById('hint-display');
+        const modal = document.getElementById('modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const mpTimer = document.getElementById('mp-timer');
+        const vk = document.getElementById('virtual-keyboard');
+
+        if (!modeSpBtn || !modeMpBtn) return; // si no existe el selector, no hacer nada
+
+        let mode = localStorage.getItem('gameMode') || 'sp';
+        let currentTargetInput = document.getElementById('number-input');
+        function applyModeUI(){
+            const isMp = mode === 'mp';
+            modeSpBtn.classList.toggle('active', !isMp);
+            modeMpBtn.classList.toggle('active', isMp);
+            spSection.hidden = isMp;
+            mpSection.hidden = !isMp;
+            hintDisplay.textContent = '';
+            if (!isMp) stopMpTimer();
+        }
+        modeSpBtn.addEventListener('click', ()=>{ mode='sp'; localStorage.setItem('gameMode','sp'); applyModeUI(); });
+        modeMpBtn.addEventListener('click', ()=>{ mode='mp'; localStorage.setItem('gameMode','mp'); resetMpMatch(); applyModeUI(); });
+        applyModeUI();
+
+        // Teclado virtual solo propio
+        [p1Input, p2Input].forEach(el=>{
+            if (!el) return;
+            el.addEventListener('touchstart', e=>e.preventDefault());
+            el.addEventListener('mousedown', e=>e.preventDefault());
+            el.addEventListener('click', ()=>{ currentTargetInput = el; vk.classList.add('show'); vk.style.display='block'; });
+        });
+        vk.addEventListener('click', (e)=>{
+            const btn = e.target.closest('.key-btn');
+            if (!btn) return;
+            const key = btn.getAttribute('data-key');
+            const target = currentTargetInput;
+            if (!target) return;
+            const val = target.value || '';
+            if (key === 'backspace') target.value = val.slice(0,-1);
+            else if (/^\d$/.test(key)) { if (val.length < 3) target.value = val + key; }
+        });
+
+        // Estado MP
+        let mp = { ronda: 1, total: 5, secreto: null, p1Score: 0, p2Score: 0, tId: null, tLeft: 15, p1Locked: false, p2Locked: false, hintUsed: false };
+
+        function resetMpMatch(){
+            mp = { ronda: 1, total: 5, secreto: null, p1Score: 0, p2Score: 0, tId: null, tLeft: 15, p1Locked: false, p2Locked: false, hintUsed: false };
+            p1ScoreEl.textContent = '0';
+            p2ScoreEl.textContent = '0';
+            p1Input.value = '';
+            p2Input.value = '';
+            roundDisplay.textContent = `${mp.ronda}/${mp.total}`;
+            startMpRound();
+        }
+
+        function startMpRound(){
+            mp.secreto = Math.floor(Math.random()*100)+1;
+            mp.p1Locked = false; mp.p2Locked = false; p1Input.value=''; p2Input.value='';
+            mp.tLeft = 15; mpTimer.textContent = mp.tLeft+'s';
+            stopMpTimer();
+            mp.tId = setInterval(()=>{
+                mp.tLeft--; mpTimer.textContent = mp.tLeft+'s';
+                if (mp.tLeft<=0){ stopMpTimer(); endMpRound(); }
+            },1000);
+        }
+        function stopMpTimer(){ if (mp.tId) { clearInterval(mp.tId); mp.tId=null; } }
+
+        function endMpRound(){
+            const v1 = parseInt(p1Input.value,10); const v2 = parseInt(p2Input.value,10);
+            const has1 = !isNaN(v1); const has2 = !isNaN(v2);
+            const d1 = has1 ? Math.abs(v1-mp.secreto) : 100;
+            const d2 = has2 ? Math.abs(v2-mp.secreto) : 100;
+            const pts1 = has1 ? Math.max(0,100-d1) : 0;
+            const pts2 = has2 ? Math.max(0,100-d2) : 0;
+            mp.p1Score += pts1; mp.p2Score += pts2;
+            if (has1 && has2 && d1!==d2){ const minD = Math.min(d1,d2); if (d1>d2) mp.p1Score -= minD; else mp.p2Score -= minD; }
+            p1ScoreEl.textContent = String(mp.p1Score);
+            p2ScoreEl.textContent = String(mp.p2Score);
+            if (mp.ronda>=mp.total){
+                const ganador = mp.p1Score===mp.p2Score ? 'Empate' : (mp.p1Score>mp.p2Score?'Jugador 1':'Jugador 2');
+                modalTitle.textContent = 'Resultado Multijugador';
+                modalMessage.innerHTML = `🎉 ¡Partida terminada!<br><br>Puntuación J1: <strong>${mp.p1Score}</strong><br>Puntuación J2: <strong>${mp.p2Score}</strong><br><br><strong>Ganador:</strong> ${ganador}`;
+                modal.style.display = 'block';
+                document.body.style.overflow = 'hidden';
+                return;
+            }
+            mp.ronda++; roundDisplay.textContent = `${mp.ronda}/${mp.total}`; startMpRound();
+        }
+
+        p1GuessBtn.addEventListener('click', ()=>{ if (mode!=='mp'||mp.p1Locked) return; mp.p1Locked=true; if (mp.p1Locked&&mp.p2Locked){ stopMpTimer(); endMpRound(); } });
+        p2GuessBtn.addEventListener('click', ()=>{ if (mode!=='mp'||mp.p2Locked) return; mp.p2Locked=true; if (mp.p1Locked&&mp.p2Locked){ stopMpTimer(); endMpRound(); } });
+
+        // Pista en MP: solo ecuación y carrera
+        hintBtn.addEventListener('click', (e)=>{
+            if (mode!=='mp') return; // SP se maneja en el script del juego
+            if (mp.hintUsed) return;
+            mp.hintUsed = true;
+            const a = Math.floor(Math.random()*9)+2; const x = Math.floor(Math.random()*20)+1; const b = Math.floor(Math.random()*20)+1; const c = a*x+b;
+            const eq = `${a}x + ${b} = ${c}`;
+            const correct = x;
+            modalTitle.textContent = 'Reto Matemático (Multijugador)';
+            modalMessage.innerHTML = `
+                <div class="ecuacion-modal" style="text-align:center">
+                    <p>Primero en resolver ve la pista. Si ambos resuelven, ambos la verán.</p>
+                    <div class="ecuacion-display">${eq}</div>
+                    <div style="display:flex; gap:8px; margin-top:8px;">
+                        <input type="number" id="eq-p1" placeholder="J1" style="flex:1; padding:12px; border:2px solid var(--border-color); border-radius:12px; text-align:center;">
+                        <input type="number" id="eq-p2" placeholder="J2" style="flex:1; padding:12px; border:2px solid var(--border-color); border-radius:12px; text-align:center;">
+                    </div>
+                    <button id="eq-submit" class="mobile-modal-btn" style="margin-top:10px;">Comprobar</button>
+                </div>`;
+            modal.style.display = 'block'; document.body.style.overflow='hidden';
+            const submit = document.getElementById('eq-submit');
+            submit.addEventListener('click', ()=>{
+                const r1 = parseInt(document.getElementById('eq-p1').value,10);
+                const r2 = parseInt(document.getElementById('eq-p2').value,10);
+                const ok1 = r1===correct, ok2 = r2===correct;
+                const pista = buildHint(mp.secreto);
+                if (ok1 && ok2){ hintDisplay.textContent = pista; modalMessage.innerHTML = 'Ambos resolvieron. Pista visible para ambos.'; }
+                else if (ok1){ hintDisplay.textContent = `J1: ${pista}`; modalMessage.innerHTML = 'J1 resolvió primero. Pista mostrada.'; }
+                else if (ok2){ hintDisplay.textContent = `J2: ${pista}`; modalMessage.innerHTML = 'J2 resolvió primero. Pista mostrada.'; }
+                else { modalMessage.innerHTML = 'Nadie resolvió. Sin pista.'; }
+            });
+        });
+
+        function buildHint(secret){
+            const nums = Array.from({length:100},(_,i)=>i+1).filter(n=>n!==secret);
+            for (let i=nums.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [nums[i],nums[j]]=[nums[j],nums[i]]; }
+            const list = nums.slice(0,25).sort((a,b)=>a-b);
+            const ranges=[]; let s=list[0], e=list[0];
+            for (let i=1;i<list.length;i++){ if (list[i]===e+1) e=list[i]; else { ranges.push([s,e]); s=e=list[i]; } }
+            ranges.push([s,e]);
+            return 'El número NO es: ' + ranges.map(([a,b])=> a===b?`${a}`:`${a}-${b}`).join(', ');
+        }
+    })();
+    </script>
 </body>
 </html>
+
